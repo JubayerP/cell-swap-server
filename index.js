@@ -17,6 +17,7 @@ function run() {
     try {
         const categoryCollection = client.db('cellSwap').collection('categories')
         const phonesCollection = client.db('cellSwap').collection('phones')
+        const usersCollection = client.db('cellSwap').collection('users')
 
         app.get('/categories', async (req, res) => {
             const categories = await categoryCollection.find({}).toArray();
@@ -41,6 +42,18 @@ function run() {
             const query = { _id: ObjectId(id) }
             const phone = await phonesCollection.findOne(query)
             res.send(phone)
+        })
+
+        app.put('/users/:email', async (req, res) => {
+            const email = req.params.email;
+            const user = req.body;
+            const filter = { email: email}
+            const options = { upsert: true }
+            const updateDoc = {
+                $set: user
+            }
+            const result = await usersCollection.updateOne(filter, updateDoc, options)
+            res.send(result)
         })
         
     }
