@@ -18,6 +18,7 @@ function run() {
         const categoryCollection = client.db('cellSwap').collection('categories')
         const phonesCollection = client.db('cellSwap').collection('phones')
         const usersCollection = client.db('cellSwap').collection('users')
+        const bookingsCollection = client.db('cellSwap').collection('bookings')
 
         app.get('/categories', async (req, res) => {
             const categories = await categoryCollection.find({}).toArray();
@@ -53,6 +54,26 @@ function run() {
                 $set: user
             }
             const result = await usersCollection.updateOne(filter, updateDoc, options)
+            res.send(result)
+        })
+
+        app.get('/users', async (req, res) => {
+            const user = await usersCollection.find({}).toArray();
+            res.send(user)
+        })
+
+        app.get('/users/seller', async (req, res) => {
+            const email = req.query.email;
+            const user = await usersCollection.findOne({ email })
+            if (user?.role === 'Seller') {
+               return res.send({isSeller: user?.role === 'Seller'})
+            }
+            return res.status(401).send({message: 'Your are not Seller'})
+        })
+
+        app.post('/bookings', async (req, res) => {
+            const booking = req.body;
+            const result = await bookingsCollection.insertOne(booking);
             res.send(result)
         })
         
