@@ -19,6 +19,7 @@ function run() {
         const phonesCollection = client.db('cellSwap').collection('phones')
         const usersCollection = client.db('cellSwap').collection('users')
         const bookingsCollection = client.db('cellSwap').collection('bookings')
+        const adsCollection = client.db('cellSwap').collection('ads')
 
         app.get('/categories', async (req, res) => {
             const categories = await categoryCollection.find({}).toArray();
@@ -31,6 +32,12 @@ function run() {
             res.send(singleCategory)
         })
 
+        app.get('/phones', async (req, res) => {
+            const query = {};
+            const phones = await phonesCollection.find(query).toArray();
+            res.send(phones);
+        })
+
         app.get('/phones/categories/:category', async (req, res) => {
             const category = req.params.category;
             const query = { category: category };
@@ -38,11 +45,24 @@ function run() {
             res.send(phones)
         })
 
+        app.post('/phones', async (req, res) => {
+            const phone = req.body;
+            const result = await phonesCollection.insertOne(phone)
+            res.send(result);
+        })
+
         app.get('/phones/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: ObjectId(id) }
             const phone = await phonesCollection.findOne(query)
             res.send(phone)
+        })
+
+        app.get('/myPhones', async (req, res) => {
+            const email = req.query.email;
+            const query = { email: email };
+            const phones = await phonesCollection.find(query).toArray();
+            res.send(phones)
         })
 
         app.put('/users/:email', async (req, res) => {
@@ -68,13 +88,32 @@ function run() {
             if (user?.role === 'Seller') {
                return res.send({isSeller: user?.role === 'Seller'})
             }
-            return res.status(401).send({message: 'Your are not Seller'})
+        })
+
+        app.get('/users/buyer', async (req, res)=>{
+            const email = req.query.email;
+            const user = await usersCollection.findOne({ email });
+            if (user?.role === 'Buyer') {
+                return res.send({isBuyer: user?.role === 'Buyer'})
+            }
         })
 
         app.post('/bookings', async (req, res) => {
             const booking = req.body;
             const result = await bookingsCollection.insertOne(booking);
             res.send(result)
+        })
+
+        app.put('/ads', async (req, res) => {
+            const phone = req.body;
+            const email = req.query.email;
+            const filter = {email: email }
+            const options = { upsert: true };
+            const updateDoc = {
+                $set: phone
+            }
+            const result = await adsCollection.updateOne(filter, updateDoc, options)
+            res.send(result);
         })
         
     }
