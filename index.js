@@ -106,14 +106,19 @@ function run() {
 
         app.put('/ads', async (req, res) => {
             const phone = req.body;
-            const email = req.query.email;
-            const filter = {email: email }
+            const id = req.query.id;
+            const filter = { _id: id };
             const options = { upsert: true };
             const updateDoc = {
                 $set: phone
             }
             const result = await adsCollection.updateOne(filter, updateDoc, options)
             res.send(result);
+        })
+
+        app.get('/ads', async (req, res) => {
+            const adsPhones = await adsCollection.find({}).toArray();
+            res.send(adsPhones);
         })
         
     }
