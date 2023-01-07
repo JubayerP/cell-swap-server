@@ -103,7 +103,31 @@ function run() {
             const user = await usersCollection.findOne({ email });
             if (user?.role === 'Admin') {
                 return res.send({isAdmin: user?.role === 'Admin'})
+            } else {
+                return res.send({message: 'You Are Not Admin'})
             }
+        })
+
+        app.get('/users/allsellers', async (req, res) => {
+            const role = { role: 'Seller' }
+            const sellers = await usersCollection.find(role).toArray();
+            res.send(sellers);
+        })
+        app.get('/users/allbuyers', async (req, res) => {
+            const role = { role: 'Buyer' }
+            const buyers = await usersCollection.find(role).toArray();
+            res.send(buyers);
+        })
+
+        app.delete('/users/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const user = await usersCollection.findOne(query)
+            if (user.role === 'Seller' || user.role === 'Buyer') {
+                const deleteUser = await usersCollection.deleteOne(query);
+                return res.send(deleteUser);
+            }
+            return res.send({message: 'Not a Seller or Buyer'})
         })
 
         app.post('/bookings', async (req, res) => {
