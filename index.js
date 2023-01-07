@@ -20,6 +20,7 @@ function run() {
         const usersCollection = client.db('cellSwap').collection('users')
         const bookingsCollection = client.db('cellSwap').collection('bookings')
         const adsCollection = client.db('cellSwap').collection('ads')
+        const wishlistCollection = client.db('cellSwap').collection('wishlist')
 
         app.get('/categories', async (req, res) => {
             const categories = await categoryCollection.find({}).toArray();
@@ -134,6 +135,15 @@ function run() {
             const booking = req.body;
             const result = await bookingsCollection.insertOne(booking);
             res.send(result)
+        })
+
+        app.post('/wishlist', async (req, res) => {
+            const id = req.query.id;
+            const query = { _id: ObjectId(id) };
+            const phone = await phonesCollection.findOne(query);
+            const wishlistPhone = { ...phone, email: req.body.email };
+            const result = await wishlistCollection.insertOne(wishlistPhone);
+            res.send(result);
         })
 
         app.put('/ads', async (req, res) => {
