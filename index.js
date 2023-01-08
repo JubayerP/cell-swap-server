@@ -4,6 +4,7 @@ const app = express();
 require('dotenv').config();
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const jwt = require('jsonwebtoken');
 
 app.use(cors())
 app.use(express.json())
@@ -12,6 +13,23 @@ app.use(express.json())
 
 const uri = process.env.DB_URI;
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
+
+function verifyJWT(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        return res.status(401).send({message: 'unauthorized access'})
+    }
+
+    const token = authHeader.split(' ')[1]
+
+    jwt.verify(token, process.env.ACCESS_TOKEN, function (err, decoded) {
+        if (err) {
+            return res.status(403).send({message: 'forbidden access'})
+        }
+        req.decoded = decoded;
+        next();
+    })
+}
 
 function run() {
     try {
@@ -114,7 +132,15 @@ function run() {
             const sellers = await usersCollection.find(role).toArray();
             res.send(sellers);
         })
-        app.get('/users/allbuyers', async (req, res) => {
+
+        app.get('/users/allbuyers', verifyJWT, async (req, res) => {
+            const decodedEmail = req.decoded.email;
+            const email = req.query.email;
+            if (email !== decodedEmail) {
+                return res.status(403).send({ message: 'forbidded access' })
+            }
+
+
             const role = { role: 'Buyer' }
             const buyers = await usersCollection.find(role).toArray();
             res.send(buyers);
@@ -137,13 +163,26 @@ function run() {
             res.send(result)
         })
 
-        app.post('/wishlist', async (req, res) => {
+        app.put('/wishlist', async (req, res) => {
             const id = req.query.id;
-            const query = { _id: ObjectId(id) };
-            const phone = await phonesCollection.findOne(query);
+            const filter = { _id: ObjectId(id) };
+            const phone = await phonesCollection.findOne(filter);
             const wishlistPhone = { ...phone, email: req.body.email };
-            const result = await wishlistCollection.insertOne(wishlistPhone);
+
+            const options = { upsert: true };
+            const updateDoc = {
+                $set: wishlistPhone
+            }
+
+            const result = await wishlistCollection.updateOne(filter, updateDoc, options);
             res.send(result);
+        })
+
+        app.get('/wishlist', async (req, res) => {
+            const email = req.query.email;
+            const query = { email: email };
+            const wishlist = await wishlistCollection.find(query).toArray();
+            res.send(wishlist)
         })
 
         app.put('/ads', async (req, res) => {
@@ -158,9 +197,48 @@ function run() {
             res.send(result);
         })
 
-        app.get('/ads', async (req, res) => {
+        app.get('/ads', verifyJWT, async (req, res) => {
+            const email = req.query.email;
+            const decodedEmail = req.decoded.email;
+            if (email !== decodedEmail) {
+                return res.status(403).send({message: 'forbidden access'})
+            }
+
             const adsPhones = await adsCollection.find({}).toArray();
             res.send(adsPhones);
+        })
+
+
+        app.get('/jwt', async (req, res) => {
+            const email = req.query.email;
+            const query = { email: email };
+            const user = await usersCollection.findOne(query);
+
+            if (user) {
+                const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, {expiresIn: '3d'});
+                return res.send({accessToken: token})
+            }
+            res.status(403).send({ accessToken: '' })
+        })
+
+        app.put('/verifySeller', async (req, res) => {
+            const email = req.query.email;
+            const filter = { email: email };
+            const user = await usersCollection.findOne(filter);
+            
+            if (user.role === 'Seller') {
+                const phones = await phonesCollection.find(filter).toArray();
+                const updateDoc = {
+                    $set: {
+                        status: 'verified'
+                    }
+                }
+                const sellerUpdate = await usersCollection.updateOne(filter, updateDoc);
+                const phonesUpdate = await phonesCollection.updateMany(filter, updateDoc);
+
+                res.json({sellerUpdate, phonesUpdate})
+            }
+            return res.send({message: 'This user is not seller'})
         })
         
     }
