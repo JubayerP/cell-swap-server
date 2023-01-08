@@ -5,6 +5,7 @@ require('dotenv').config();
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken');
+const stripe = require('stripe')(process.env.STRIPE_SECRET)
 
 app.use(cors())
 app.use(express.json())
@@ -17,14 +18,14 @@ const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology:
 function verifyJWT(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader) {
-        return res.status(401).send({message: 'unauthorized access'})
+        return res.status(401).send({ message: 'unauthorized access' })
     }
 
     const token = authHeader.split(' ')[1]
 
     jwt.verify(token, process.env.ACCESS_TOKEN, function (err, decoded) {
         if (err) {
-            return res.status(403).send({message: 'forbidden access'})
+            return res.status(403).send({ message: 'forbidden access' })
         }
         req.decoded = decoded;
         next();
@@ -39,6 +40,7 @@ function run() {
         const bookingsCollection = client.db('cellSwap').collection('bookings')
         const adsCollection = client.db('cellSwap').collection('ads')
         const wishlistCollection = client.db('cellSwap').collection('wishlist')
+        const paymentsCollection = client.db('cellSwap').collection('payments')
 
         app.get('/categories', async (req, res) => {
             const categories = await categoryCollection.find({}).toArray();
@@ -87,7 +89,7 @@ function run() {
         app.put('/users/:email', async (req, res) => {
             const email = req.params.email;
             const user = req.body;
-            const filter = { email: email}
+            const filter = { email: email }
             const options = { upsert: true }
             const updateDoc = {
                 $set: user
@@ -105,15 +107,15 @@ function run() {
             const email = req.query.email;
             const user = await usersCollection.findOne({ email })
             if (user?.role === 'Seller') {
-               return res.send({isSeller: user?.role === 'Seller'})
+                return res.send({ isSeller: user?.role === 'Seller' })
             }
         })
 
-        app.get('/users/buyer', async (req, res)=>{
+        app.get('/users/buyer', async (req, res) => {
             const email = req.query.email;
             const user = await usersCollection.findOne({ email });
             if (user?.role === 'Buyer') {
-                return res.send({isBuyer: user?.role === 'Buyer'})
+                return res.send({ isBuyer: user?.role === 'Buyer' })
             }
         })
 
@@ -121,9 +123,9 @@ function run() {
             const email = req.query.email;
             const user = await usersCollection.findOne({ email });
             if (user?.role === 'Admin') {
-                return res.send({isAdmin: user?.role === 'Admin'})
+                return res.send({ isAdmin: user?.role === 'Admin' })
             } else {
-                return res.send({message: 'You Are Not Admin'})
+                return res.send({ message: 'You Are Not Admin' })
             }
         })
 
@@ -154,13 +156,26 @@ function run() {
                 const deleteUser = await usersCollection.deleteOne(query);
                 return res.send(deleteUser);
             }
-            return res.send({message: 'Not a Seller or Buyer'})
+            return res.send({ message: 'Not a Seller or Buyer' })
         })
 
         app.post('/bookings', async (req, res) => {
             const booking = req.body;
             const result = await bookingsCollection.insertOne(booking);
             res.send(result)
+        })
+
+        app.get('/myorders', async (req, res) => {
+            const email = req.query.email;
+            const query = { email: email };
+            const orders = await bookingsCollection.find(query).toArray();
+            res.send(orders)
+        })
+        app.get('/myorders/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const order = await bookingsCollection.findOne(query);
+            res.send(order);
         })
 
         app.put('/wishlist', async (req, res) => {
@@ -201,7 +216,7 @@ function run() {
             const email = req.query.email;
             const decodedEmail = req.decoded.email;
             if (email !== decodedEmail) {
-                return res.status(403).send({message: 'forbidden access'})
+                return res.status(403).send({ message: 'forbidden access' })
             }
 
             const adsPhones = await adsCollection.find({}).toArray();
@@ -215,8 +230,8 @@ function run() {
             const user = await usersCollection.findOne(query);
 
             if (user) {
-                const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, {expiresIn: '3d'});
-                return res.send({accessToken: token})
+                const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, { expiresIn: '3d' });
+                return res.send({ accessToken: token })
             }
             res.status(403).send({ accessToken: '' })
         })
@@ -224,8 +239,8 @@ function run() {
         app.put('/verifySeller', async (req, res) => {
             const email = req.query.email;
             const filter = { email: email };
-            const user = await usersCollection.findOne(filter);
-            
+            const user = await usersCollection.findOne(filter)
+
             if (user.role === 'Seller') {
                 const phones = await phonesCollection.find(filter).toArray();
                 const updateDoc = {
@@ -236,14 +251,42 @@ function run() {
                 const sellerUpdate = await usersCollection.updateOne(filter, updateDoc);
                 const phonesUpdate = await phonesCollection.updateMany(filter, updateDoc);
 
-                res.json({sellerUpdate, phonesUpdate})
+                res.json({ sellerUpdate, phonesUpdate })
             }
-            return res.send({message: 'This user is not seller'})
+            // return res.send({message: 'This user is not seller'})
         })
-        
+
+        app.post('/create-payment-intent', async (req, res) => {
+            const price = req.body.price;
+            const amount = price * 100;
+            const paymentIntent = await stripe.paymentIntents.create({
+                currency: 'usd',
+                amount: amount,
+                'payment_method_types': [
+                    'card'
+                ]
+            })
+            res.send({ clientSecret: paymentIntent.client_secret })
+        })
+
+        app.post('/payments', async (req, res) => {
+            const payment = req.body;
+            const result = await paymentsCollection.insertOne(payment)
+            const id = payment.bookingId
+            const filter = {_id: ObjectId(id)}
+            const updatedDoc = {
+                $set: {
+                    paid: true,
+                    transactionId: payment.transactionId
+                }
+            }
+
+            const updatedResult = await bookingsCollection.updateOne(filter, updatedDoc)
+            res.send(result)
+        })
     }
     finally {
-        
+
     }
 }
 run()
