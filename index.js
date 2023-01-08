@@ -173,7 +173,7 @@ function run() {
         })
         app.get('/myorders/:id', async (req, res) => {
             const id = req.params.id;
-            const query = { _id: ObjectId(id) };
+            const query = { bookingId: id };
             const order = await bookingsCollection.findOne(query);
             res.send(order);
         })
@@ -273,7 +273,10 @@ function run() {
             const payment = req.body;
             const result = await paymentsCollection.insertOne(payment)
             const id = payment.bookingId
-            const filter = {_id: ObjectId(id)}
+            const filter = { _id: ObjectId(id) }
+            const bookFilter = {bookingId: id}
+            const adsFilter = {_id: id}
+            // console.log(filter);
             const updatedDoc = {
                 $set: {
                     paid: true,
@@ -281,7 +284,9 @@ function run() {
                 }
             }
 
-            const updatedResult = await bookingsCollection.updateOne(filter, updatedDoc)
+            const updatedResult = await bookingsCollection.updateOne(bookFilter, updatedDoc);
+            const phones = await phonesCollection.updateOne(filter, updatedDoc);
+            const ads = await adsCollection.updateOne(adsFilter, updatedDoc);
             res.send(result)
         })
     }
